@@ -119,7 +119,7 @@ jobs:
           #sudo apt-get install -y --no-install-recommends curl bison flex make binutils git perl gcc python3 python-is-python3 bc libssl-dev libelf-dev zip unzip ccache
           
           echo "正在克隆源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT7pro-Speed-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip && 
+          aria2c -s16 -x16 -k1M https://github.com/7Night-kqx/realme_GT7pro-Speed-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip && 
           unzip -q common.zip && 
           mv "realme_GT7pro-Speed-AndroidB-common-source" common &&
           rm -rf common.zip &
