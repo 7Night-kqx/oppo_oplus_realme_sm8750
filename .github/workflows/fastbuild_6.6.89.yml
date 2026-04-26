@@ -46,6 +46,11 @@ on:
         required: true
         type: boolean
         default: 'false'
+      ntsync_enable:
+        description: '是否安装 NTSYNC 补丁'
+        required: true
+        type: boolean
+        default: 'false'
       bbr_enable:
         description: "是否启用bbr算法(优化上行数据,对手机日用无太大意义甚至可能负优化;false关闭,true仅加入算法,default启用算法并设为默认)"
         required: true
@@ -463,6 +468,17 @@ jobs:
           cd common
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/config.patch
           patch -p1 -F 3 < config.patch || true
+
+      - name: 添加 NTSYNC补丁
+        if: inputs.ntsync_enable
+        run: |
+          echo "正在添加NTSYNC补丁..."
+          cd kernel_workspace
+          echo "CONFIG_NTSYNC=y" >> ./common/arch/arm64/configs/gki_defconfig
+          wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_base.patch
+          wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_compat_android15-6.6.patch
+          patch -p1 -F 3 < ntsync_base.patch || true
+          patch -p1 -F 3 < ntsync_compat_android15-6.6.patch || true
 
       - name: 添加 BBR 等一系列拥塞控制算法
         run: |
