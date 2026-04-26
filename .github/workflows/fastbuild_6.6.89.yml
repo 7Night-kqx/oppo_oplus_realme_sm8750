@@ -475,6 +475,7 @@ jobs:
           echo "正在应用NTSYNC补丁..."
           cd kernel_workspace
           echo "CONFIG_NTSYNC=y" >> ./common/arch/arm64/configs/gki_defconfig
+          cd ./common
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_base.patch
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_compat_android15-6.6.patch
           patch -p1 < ntsync_compat_android15-6.6.patch || true
