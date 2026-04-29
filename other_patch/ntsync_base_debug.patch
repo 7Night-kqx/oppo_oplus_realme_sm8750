@@ -1,99 +1,163 @@
 diff --git a/drivers/misc/ntsync.c b/drivers/misc/ntsync.c
-index d95c737..a1b2c3d 100644
+index abcdef1..1234567 100644
 --- a/drivers/misc/ntsync.c
 +++ b/drivers/misc/ntsync.c
-@@ -1,9 +1,18 @@
+@@ -1,6 +1,7 @@
  // SPDX-License-Identifier: GPL-2.0-only
  /*
   * ntsync.c - Kernel driver for NT synchronization primitives
-+ *
-+ * Debug version: Print every major operation to dmesg
++ * Debug patch: added detailed dmesg logging for calls
   *
   * Copyright (C) 2024 Elizabeth Figura <zfigura@codeweavers.com>
-+ * Debug added for Android game optimization
   */
- 
+@@ -20,6 +21,7 @@
+ #include <linux/version.h>
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+ #include <linux/mnt_idmapping.h>
++#endif
++
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-+
-+#include <linux/module.h>
-+
-+static bool ntsync_debug = true;
-+module_param(ntsync_debug, bool, 0644);
-+MODULE_PARM_DESC(ntsync_debug, "Enable verbose debugging output for ntsync");
-+
- #include <linux/anon_inodes.h>
- #include <linux/atomic.h>
- #include <linux/file.h>
-@@ -45,6 +54,23 @@
  
  #define NTSYNC_NAME "ntsync"
  
-+static const char *ntsync_cmd_name(unsigned int cmd)
-+{
-+	switch (cmd) {
-+	case NTSYNC_IOC_CREATE_SEM:    return "CREATE_SEM";
-+	case NTSYNC_IOC_CREATE_MUTEX:  return "CREATE_MUTEX";
-+	case NTSYNC_IOC_CREATE_EVENT:  return "CREATE_EVENT";
-+	case NTSYNC_IOC_WAIT_ANY:      return "WAIT_ANY";
-+	case NTSYNC_IOC_WAIT_ALL:      return "WAIT_ALL";
-+	case NTSYNC_IOC_SEM_RELEASE:   return "SEM_RELEASE";
-+	case NTSYNC_IOC_MUTEX_UNLOCK:  return "MUTEX_UNLOCK";
-+	case NTSYNC_IOC_MUTEX_KILL:    return "MUTEX_KILL";
-+	case NTSYNC_IOC_EVENT_SET:     return "EVENT_SET";
-+	case NTSYNC_IOC_EVENT_RESET:   return "EVENT_RESET";
-+	case NTSYNC_IOC_EVENT_PULSE:   return "EVENT_PULSE";
-+	default:                       return "UNKNOWN_CMD";
-+	}
-+}
+@@ -85,6 +87,8 @@ struct ntsync_device {
+ 
+ static struct delayed_work ntsync_perm_work;
+ 
++/* Debug helper */
++static void ntsync_debug(const char *func, const char *fmt, ...) __printf(2, 3);
+ 
+ /*
+  * Single objects are locked using obj->lock.
+@@ -312,6 +316,8 @@ static int ntsync_sem_release(struct ntsync_obj *sem, void __user *argp)
+ 	if (sem->type != NTSYNC_TYPE_SEM)
+ 		return -EINVAL;
+ 
++	pr_info("SEM_RELEASE: count=%u, current=%u\n", args, sem->u.sem.count);
 +
- enum ntsync_type {
- 	NTSYNC_TYPE_SEM,
- 	NTSYNC_TYPE_MUTEX,
-@@ -512,6 +538,11 @@ static long ntsync_obj_ioctl(struct file *file, unsigned int cmd,
+ 	all = ntsync_lock_obj(dev, sem);
+ 	prev_count = sem->u.sem.count;
+ 	ret = release_sem_state(sem, args);
+@@ -340,6 +346,8 @@ static int ntsync_mutex_unlock(struct ntsync_obj *mutex, void __user *argp)
+ 	if (mutex->type != NTSYNC_TYPE_MUTEX)
+ 		return -EINVAL;
+ 
++	pr_info("MUTEX_UNLOCK: owner=%u, current_count=%u\n", args.owner, mutex->u.mutex.count);
++
+ 	all = ntsync_lock_obj(dev, mutex);
+ 	prev_count = mutex->u.mutex.count;
+ 	ret = unlock_mutex_state(mutex, &args);
+@@ -368,6 +376,8 @@ static int ntsync_mutex_kill(struct ntsync_obj *mutex, void __user *argp)
+ 	if (mutex->type != NTSYNC_TYPE_MUTEX)
+ 		return -EINVAL;
+ 
++	pr_info("MUTEX_KILL: owner=%u\n", owner);
++
+ 	all = ntsync_lock_obj(dev, mutex);
+ 	ret = kill_mutex_state(mutex, owner);
+ 	if (!ret) {
+@@ -393,6 +403,7 @@ static int ntsync_event_set(struct ntsync_obj *event, void __user *argp, bool pu
+ 	if (event->type != NTSYNC_TYPE_EVENT)
+ 		return -EINVAL;
+ 
++	pr_info("EVENT_%s: manual=%d, was_signaled=%d\n", pulse ? "PULSE" : "SET", event->u.event.manual, prev_state);
+ 	all = ntsync_lock_obj(dev, event);
+ 	prev_state = event->u.event.signaled;
+ 	event->u.event.signaled = true;
+@@ -416,6 +427,8 @@ static int ntsync_event_reset(struct ntsync_obj *event, void __user *argp)
+ 	if (event->type != NTSYNC_TYPE_EVENT)
+ 		return -EINVAL;
+ 
++	pr_info("EVENT_RESET: was_signaled=%d\n", event->u.event.signaled);
++
+ 	all = ntsync_lock_obj(dev, event);
+ 	prev_state = event->u.event.signaled;
+ 	event->u.event.signaled = false;
+@@ -552,6 +565,8 @@ static int ntsync_create_sem(struct ntsync_device *dev, void __user *argp)
+ 	sem->u.sem.count = args.count;
+ 	sem->u.sem.max = args.max;
+ 
++	pr_info("CREATE_SEM: count=%u, max=%u, fd=%d\n", args.count, args.max, fd);
++
+ 	fd = ntsync_obj_get_fd(sem);
+ 	if (fd < 0)
+ 		ntsync_free_obj(sem);
+@@ -575,6 +590,8 @@ static int ntsync_create_mutex(struct ntsync_device *dev, void __user *argp)
+ 	mutex->u.mutex.count = args.count;
+ 	mutex->u.mutex.owner = args.owner;
+ 
++	pr_info("CREATE_MUTEX: initial_count=%u, owner=%u, fd=%d\n", args.count, args.owner, fd);
++
+ 	fd = ntsync_obj_get_fd(mutex);
+ 	if (fd < 0)
+ 		ntsync_free_obj(mutex);
+@@ -596,6 +613,8 @@ static int ntsync_create_event(struct ntsync_device *dev, void __user *argp)
+ 	event->u.event.manual = args.manual;
+ 	event->u.event.signaled = args.signaled;
+ 
++	pr_info("CREATE_EVENT: manual=%d, signaled=%d, fd=%d\n", args.manual, args.signaled, fd);
++
+ 	fd = ntsync_obj_get_fd(event);
+ 	if (fd < 0)
+ 		ntsync_free_obj(event);
+@@ -712,6 +731,9 @@ static int ntsync_wait_any(struct ntsync_device *dev, void __user *argp)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	pr_info("WAIT_ANY: count=%u, alert=%d, timeout=%llu, owner=%u\n",
++		args.count, !!args.alert, args.timeout, args.owner);
++
+ 	total_count = args.count;
+ 	if (args.alert)
+ 		total_count++;
+@@ -780,6 +802,9 @@ static int ntsync_wait_all(struct ntsync_device *dev, void __user *argp)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	pr_info("WAIT_ALL: count=%u, alert=%d, timeout=%llu, owner=%u\n",
++		args.count, !!args.alert, args.timeout, args.owner);
++
+ 	/* queue ourselves */
+ 	mutex_lock(&dev->wait_all_lock);
+ 
+@@ -860,6 +885,8 @@ static long ntsync_obj_ioctl(struct file *file, unsigned int cmd,
+ {
  	struct ntsync_obj *obj = file->private_data;
  	void __user *argp = (void __user *)parm;
- 
-+	if (ntsync_debug)
-+		pr_info("[%s] obj_ioctl: cmd=0x%04x (%s), type=%d\n",
-+			__func__, cmd, ntsync_cmd_name(cmd), obj ? obj->type : -1);
++	const char *cmd_name = "UNKNOWN";
 +
++	switch (cmd) {
++	case NTSYNC_IOC_SEM_RELEASE: cmd_name = "SEM_RELEASE"; break;
++	case NTSYNC_IOC_SEM_READ:    cmd_name = "SEM_READ"; break;
++	case NTSYNC_IOC_MUTEX_UNLOCK: cmd_name = "MUTEX_UNLOCK"; break;
++	case NTSYNC_IOC_MUTEX_KILL:  cmd_name = "MUTEX_KILL"; break;
++	case NTSYNC_IOC_MUTEX_READ:  cmd_name = "MUTEX_READ"; break;
++	case NTSYNC_IOC_EVENT_SET:   cmd_name = "EVENT_SET"; break;
++	case NTSYNC_IOC_EVENT_RESET: cmd_name = "EVENT_RESET"; break;
++	case NTSYNC_IOC_EVENT_PULSE: cmd_name = "EVENT_PULSE"; break;
++	case NTSYNC_IOC_EVENT_READ:  cmd_name = "EVENT_READ"; break;
++	}
++
++	pr_debug("OBJ_IOCTL: cmd=%s (%#x)\n", cmd_name, cmd);
+ 
  	switch (cmd) {
- 	case NTSYNC_IOC_SEM_RELEASE:
- 		return ntsync_sem_release(obj, argp);
-@@ -680,6 +711,12 @@ static int ntsync_wait_any(struct ntsync_device *dev, void __user *argp)
- 	if (copy_from_user(&args, argp, sizeof(args)))
- 		return -EFAULT;
- 
-+	if (ntsync_debug)
-+		pr_info("[%s] WAIT_ANY: count=%u, timeout=%llu ms, alert=%u, owner=%u\n",
-+			__func__, args.count, args.timeout / 1000000, args.alert, args.owner);
-+
- 	ret = setup_wait(dev, &args, false, &q);
-+
- 	if (ret < 0)
- 		return ret;
- 
-@@ -750,6 +787,12 @@ static int ntsync_wait_all(struct ntsync_device *dev, void __user *argp)
- 	if (copy_from_user(&args, argp, sizeof(args)))
- 		return -EFAULT;
- 
-+	if (ntsync_debug)
-+		pr_info("[%s] WAIT_ALL: count=%u, timeout=%llu ms, alert=%u, owner=%u\n",
-+			__func__, args.count, args.timeout / 1000000, args.alert, args.owner);
-+
- 	ret = setup_wait(dev, &args, true, &q);
-+
- 	if (ret < 0)
- 		return ret;
- 
-@@ -890,6 +933,11 @@ static long ntsync_char_ioctl(struct file *file, unsigned int cmd,
+ 	...
+@@ -890,6 +917,8 @@ static long ntsync_char_ioctl(struct file *file, unsigned int cmd,
+ {
  	struct ntsync_device *dev = file->private_data;
  	void __user *argp = (void __user *)parm;
++	pr_debug("CHAR_IOCTL: cmd=%#x\n", cmd);
  
-+	if (ntsync_debug)
-+		pr_info("[%s] char_ioctl: cmd=0x%04x (%s)\n",
-+			__func__, cmd, ntsync_cmd_name(cmd));
-+
  	switch (cmd) {
  	case NTSYNC_IOC_CREATE_EVENT:
- 		return ntsync_create_event(dev, argp);
+@@ -1020,6 +1049,9 @@ static int ntsync_obj_release(struct inode *inode, struct file *file)
+ {
+ 	struct ntsync_obj *obj = file->private_data;
+ 
++	pr_info("OBJ_RELEASE: type=%s\n",
++		obj->type == NTSYNC_TYPE_SEM ? "SEM" :
++		obj->type == NTSYNC_TYPE_MUTEX ? "MUTEX" : "EVENT");
++
+ 	ntsync_free_obj(file->private_data);
+ 	return 0;
+ }
