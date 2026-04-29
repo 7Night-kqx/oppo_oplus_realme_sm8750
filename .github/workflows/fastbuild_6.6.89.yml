@@ -483,11 +483,10 @@ jobs:
           echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> ./common/arch/arm64/configs/gki_defconfig
           cd ./common
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_base.patch
-          wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_base_debug.patch
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/ntsync_compat_android15-6.6.patch
           patch -p1 -F 3 < ntsync_compat_android15-6.6.patch || true
           echo ---------------------------------------------------------------------------------------------------------------------------------------------------
-          patch -p1 -F 3 < ntsync_base_debug.patch || true
+          patch -p1 -F 3 < ntsync_base.patch || true
           cat ./drivers/misc/ntsync.c
 
       - name: 添加 BBR 等一系列拥塞控制算法
