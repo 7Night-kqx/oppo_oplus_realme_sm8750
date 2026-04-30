@@ -6,7 +6,7 @@ env:
   KERNEL_VERSION: '6.6'
   SUB_VERSION: '89'
   KERNEL_NAME: 'android15-8-g29d86c5fc9dd-abogki428889875-4k'
-  CCACHE_KEY: ccache-ecsv2-6.6.89
+  CCACHE_KEY: ccache-ecsv2-6.6.89F
 
 on:
   workflow_dispatch:
@@ -499,8 +499,8 @@ jobs:
           echo "CONFIG_PID_NS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEVTMPFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           cd ./common
-          wget https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/refs/heads/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch
-          patch -p1 < 001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch || true
+          wget https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/refs/heads/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_3_4_5.patch
+          patch -p1 < 001.GKI-below-6.12-fix_sysvipc_kabi_3_4_5.patch || true
 
       - name: 添加 BBR 等一系列拥塞控制算法
         run: |
